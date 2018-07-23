@@ -105,16 +105,27 @@ namespace Kicad_gerber_panelizer
         private void refreshPictureBox()
         {
             //-- on dessine les outline de chaque gerber
-            foreach (Gerber_utils gb in GerberUtils)
+           /* foreach (Gerber_utils gb in GerberUtils)
             {
                 foreach (Layer l in gb.layerList)
                 {
                     if (l.getBoardLayer() == BoardLayer.Outline)
                     {
-                        gerberParser.ParseGerber274x(l.getLines(), true, true);
+                        ParsedGerber TheGerber;
+                        var G = gerberParser.ParseGerber274x(l.getLines(), false, true);
+                        G.Name = l.getLayerName();
+
+                        TheGerber = G;
+
+                        TheGerber.FixPolygonWindings();
+                        foreach (var a in TheGerber.OutlineShapes)
+                        {
+                            a.CheckIfHole();
+                        }
+
                     }
                 }
-            }
+            }*/
         }
     }
 }

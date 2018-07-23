@@ -69,6 +69,7 @@
     <Compile Include="MacroExpressionEvaluator.cs" />
     <Compile Include="MathHelpers.cs" />
     <Compile Include="Panelizer_view.cs" />
+    <Compile Include="ParsedGerber.cs" />
     <Compile Include="PointD.cs" />
     <Compile Include="PolyLine.cs" />
     <Compile Include="Program.cs" />
