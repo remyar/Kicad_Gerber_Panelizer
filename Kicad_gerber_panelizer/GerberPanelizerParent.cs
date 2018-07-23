@@ -12,7 +12,9 @@ namespace Kicad_gerber_panelizer
 {
     public partial class GerberPanelizerParent : Form
     {
-        Gerber_utils GerberUtils = new Gerber_utils();
+        List<Gerber_utils> GerberUtils = new List<Gerber_utils>();
+        Treeview Treeview_view;
+        Gerber_Parser gerberParser = new Gerber_Parser();
 
         public GerberPanelizerParent()
         {
@@ -40,12 +42,12 @@ namespace Kicad_gerber_panelizer
         {
             //-- creation d'un nouveau panel
             Panelizer_view Panelizer_view = new Panelizer_view(panelizer_display);
-            Treeview Treeview_view = new Treeview(treeView1);
+            
 
             gerberToolStripMenuItem.Visible = true;
            // treeView1.AllowDrop = true;
 
-            this.treeView1.AllowDrop = true;
+            treeView1.AllowDrop = true;
 
 
             treeView1.Refresh();
@@ -55,22 +57,33 @@ namespace Kicad_gerber_panelizer
         {
             gerberToolStripMenuItem.Visible = false;
             treeView1.AllowDrop = false;
+
+            Treeview_view = new Treeview(treeView1);
         }
 
         private void treeView1_DragDrop(object sender, DragEventArgs e)
         {
             string[] D = e.Data.GetData(DataFormats.FileDrop) as string[];
-            GerberUtils.OpenDirectory(D);
+           // GerberUtil.OpenDirectory(D);
         }
 
         private void openDirectoryToolStripMenuItem_Click(object sender, EventArgs e)
         {
             if (folderBrowserDialog1.ShowDialog(this) == DialogResult.OK)
             {
+                Gerber_utils GerberUtil = new Gerber_utils(panelizer_display);
                 string S = folderBrowserDialog1.SelectedPath;
                 string[] D = Directory.GetFiles(S);
-                GerberUtils.OpenDirectory(D);
+                GerberUtil.OpenDirectory(D);
+
+                GerberUtils.Add(GerberUtil);
+
+                Treeview_view.addProject(GerberUtil);
+
+                refreshPictureBox();
             }
+
+            
         }
 
         private void treeView1_AfterSelect(object sender, TreeViewEventArgs e)
@@ -86,6 +99,22 @@ namespace Kicad_gerber_panelizer
         private void treeView1_DragLeave(object sender, EventArgs e)
         {
 
+        }
+
+
+        private void refreshPictureBox()
+        {
+            //-- on dessine les outline de chaque gerber
+            foreach (Gerber_utils gb in GerberUtils)
+            {
+                foreach (Layer l in gb.layerList)
+                {
+                    if (l.getBoardLayer() == BoardLayer.Outline)
+                    {
+                        gerberParser.ParseGerber274x(l.getLines(), true, true);
+                    }
+                }
+            }
         }
     }
 }
