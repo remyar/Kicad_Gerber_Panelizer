@@ -1,68 +1,52 @@
-﻿using System;
+﻿using ClipperLib;
+using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Drawing;
+//using System.Drawing.Drawing2D;
+using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text;
-using System.IO;
-using System.Text;
 using System.Text.RegularExpressions;
-using System.Diagnostics;
-using System.Globalization;
-using System.Drawing;
+
 
 namespace Kicad_gerber_panelizer
 {
+
+    public class BoardRenderColorSet
+    {
+        public Color BoardRenderBaseMaterialColor = Gerber.ParseColor("#808080");
+        public Color BoardRenderColor = Gerber.ParseColor("green");
+        public Color BoardRenderCopperColor = Color.FromArgb(219, 125, 104);
+        public Color BoardRenderPadColor = Gerber.ParseColor("gold");
+        public Color BoardRenderSilkColor = Gerber.ParseColor("white");
+
+        public Color BackgroundColor = Color.FromArgb(10, 10, 40);
+        public Color BoardRenderTraceColor = Gerber.ParseColor("green");
+        public void SetupColors(string SolderMaskColor, string SilkScreenColor, string TracesColor = "auto", string CopperColor = "gold")
+        {
+            BoardRenderColor = Gerber.ParseColor(SolderMaskColor);
+            BoardRenderSilkColor = Gerber.ParseColor(SilkScreenColor);
+            BoardRenderPadColor = Gerber.ParseColor(CopperColor);
+            BoardRenderTraceColor = Gerber.ParseColor(TracesColor);
+        }
+        public Color GetDefaultColor(BoardLayer layer, BoardSide side)
+        {
+            switch (layer)
+            {
+                case BoardLayer.Drill: return BackgroundColor;
+                case BoardLayer.Copper: return BoardRenderCopperColor;
+                case BoardLayer.Outline: return BoardRenderColor;
+                case BoardLayer.SolderMask: return MathHelpers.Interpolate(BoardRenderColor, BoardRenderBaseMaterialColor, 0.2f);
+                case BoardLayer.Silk: return BoardRenderSilkColor;
+            }
+            return Color.FromArgb(100, 255, 255, 255);
+        }
+    }
     public static class Gerber
     {
-        class QuadR
-        {
-            public double CX;
-            public double CY;
-            public double D1 = 0;
-            public double D2 = 0;
-            public double Diff;
-            public double DRat = 0;
-            public double E;
-            public double S;
-            internal void Calc(double LastX, double LastY, double X, double Y)
-            {
-                double CX1 = LastX - CX;
-                double CX2 = X - CX;
-                double CY1 = LastY - CY;
-                double CY2 = Y - CY;
-
-                D1 = Math.Sqrt(CX1 * CX1 + CY1 * CY1);
-                D2 = Math.Sqrt(CX2 * CX2 + CY2 * CY2);
-                if (D2 != 0) DRat = D1 / D2;
-
-                S = Math.Atan2(LastY - CY, LastX - CX);
-                E = Math.Atan2(Y - CY, X - CX);
-
-            }
-
-            internal void FixClockwise()
-            {
-                //       while (S < E) S += Math.PI * 2;
-                Diff = S - E;
-                while (Diff > Math.PI) Diff -= Math.PI * 2;
-                //              Console.WriteLine("clock: {0:N2}", Gerber.RadToDeg(Diff));
-            }
-
-            internal void FixCounterClockwise()
-            {
-                while (S > E) S -= Math.PI * 2;
-                while (S < 0)
-                {
-                    S += Math.PI * 2.0;
-                    E += Math.PI * 2.0;
-                }
-                Diff = E - S;
-
-                // while (Diff < 0) Diff += Math.PI * 2.0;
-                //                Console.WriteLine("counterclock: {0:N2}", Gerber.RadToDeg(Diff));
-
-            }
-        }
-
+        #region GERBERPROCESSINGDEFAULTS
         public static double ArcQualityScaleFactor = 15;
 
         public static bool DirectlyShowGeneratedBoardImages = true;
@@ -82,88 +66,24 @@ namespace Kicad_gerber_panelizer
         public static string StopRegion = "G37*";
         public static bool WaitForKey = false;
         public static bool WriteSanitized = false;
+        #endregion
 
-        public static String[] DetermineBoardSideAndLayer(string gerberfile, out BoardSide Side, out BoardLayer Layer , out String layerName)
+
+        public static int GetDefaultSortOrder(BoardSide side, BoardLayer layer)
         {
-            Side = BoardSide.Unknown;
-            Layer = BoardLayer.Unknown;
-            layerName = "";
-
-            string filename = Path.GetFileName(gerberfile);
-
-            if (filename.ToLower().Contains("outline")) { Side = BoardSide.Both; Layer = BoardLayer.Outline; layerName = "outline"; }
-            if (filename.ToLower().Contains("-edge.cuts")) { Side = BoardSide.Both; Layer = BoardLayer.Outline; layerName = "outline";}
-
-            if (filename.ToLower().Contains("-b.cu")) { Side = BoardSide.Bottom; Layer = BoardLayer.Copper; layerName = "Bottom copper"; }
-            if (filename.ToLower().Contains("-f.cu")) { Side = BoardSide.Top; Layer = BoardLayer.Copper; layerName = "Top copper"; }
-            if (filename.ToLower().Contains("-b.silks")) { Side = BoardSide.Bottom; Layer = BoardLayer.Silk; layerName = "Bottom Silk"; }
-            if (filename.ToLower().Contains("-f.silks")) { Side = BoardSide.Top; Layer = BoardLayer.Silk; layerName = "Top Silk"; }
-            if (filename.ToLower().Contains("-b.mask")) { Side = BoardSide.Bottom; Layer = BoardLayer.SolderMask; layerName = "Bottom SolderMask"; }
-            if (filename.ToLower().Contains("-f.mask")) { Side = BoardSide.Top; Layer = BoardLayer.SolderMask; layerName = "Top SolderMask"; }
-            if (filename.ToLower().Contains("-b.paste")) { Side = BoardSide.Bottom; Layer = BoardLayer.Paste; layerName = "Bottom Paste"; }
-            if (filename.ToLower().Contains("-f.paste")) { Side = BoardSide.Top; Layer = BoardLayer.Paste; layerName = "Top Paste"; }
-
-            if (Side != BoardSide.Unknown && Layer != BoardLayer.Unknown)
-                return File.ReadAllLines(gerberfile);
-            else
-                return null;
-        }
-
-        public static BoardFileType FindFileType(string filename)
-        {
-            //filename = filename.ToLower();
-            List<string> unsupported = new List<string>() { "config", "exe", "dll", "png", "zip", "gif", "jpeg", "doc", "docx", "jpg", "bmp" };
-            string[] filesplit = filename.Split('.');
-            string ext = filesplit[filesplit.Count() - 1].ToLower();
-            foreach (var s in unsupported)
+            int R = 0;
+            switch (layer)
             {
-                if (ext == s)
-                {
 
-                    return BoardFileType.Unsupported;
-                }
+                case BoardLayer.Mill: R = 11; break;
+                case BoardLayer.Silk: R = 101; break;
+                case BoardLayer.Paste: R = 10; break;
+                case BoardLayer.SolderMask: R = 102; break;
+                case BoardLayer.Copper: R = 100; break;
+                case BoardLayer.Carbon: R = 103; break;
             }
-            try
-            {
-                // var F = File.OpenText(a);
-                var F = File.ReadAllLines(filename);
-                for (int i = 0; i < F.Count(); i++)
-                {
-                    string L = F[i];
-                    if (L.Contains("%FS")) return BoardFileType.Gerber;
-                    if (L.Contains("M48")) return BoardFileType.Drill;
-                };
-
-
-            }
-            catch (Exception E)
-            {
-                if (Gerber.ExtremelyVerbose)
-                {
-                    Console.WriteLine("Exception determining filetype: {0}", E.Message);
-                }
-                return BoardFileType.Unsupported;
-            }
-
-            return BoardFileType.Unsupported;
-
-
-        }
-
-        internal static bool TryParseDouble(string inp, out double N)
-        {
-            inp = inp.Replace("*", "");
-            return double.TryParse(inp, NumberStyles.Any, CultureInfo.InvariantCulture, out N);
-        }
-
-        public static string ToFloatingPointString(double value)
-        {
-            return ToFloatingPointString(value, NumberFormatInfo.CurrentInfo);
-        }
-
-        public static double RadToDeg(double inp)
-        {
-            return inp * 360.0 / (Math.PI * 2.0);
+            if (side == BoardSide.Bottom) R *= -1;
+            return R;
         }
 
         private static readonly Regex rxScientific = new Regex(@"^(?<sign>-?)(?<head>\d+)(\.(?<tail>\d*?)0*)?E(?<exponent>[+\-]\d+)$", RegexOptions.IgnoreCase | RegexOptions.ExplicitCapture | RegexOptions.CultureInvariant);
@@ -317,6 +237,576 @@ namespace Kicad_gerber_panelizer
             return R;
         }
 
+        public static void DetermineBoardSideAndLayer(string gerberfile, out BoardSide Side, out BoardLayer Layer)
+        {
+            Side = BoardSide.Unknown;
+            Layer = BoardLayer.Unknown;
+            string filename = Path.GetFileName(gerberfile);
+            string[] filesplit = Path.GetFileName(gerberfile).Split('.');
+            string ext = filesplit[filesplit.Count() - 1].ToLower();
+            switch (ext)
+            {
+                case "gbr":
+
+                    switch (Path.GetFileNameWithoutExtension(gerberfile).ToLower())
+                    {
+                        case "boardoutline":
+                            Side = BoardSide.Both;
+                            Layer = BoardLayer.Outline;
+                            break;
+                        case "outline":
+                            Side = BoardSide.Both;
+                            Layer = BoardLayer.Outline;
+                            break;
+
+                        case "board":
+                            Side = BoardSide.Both;
+                            Layer = BoardLayer.Outline;
+                            break;
+                        case "bottom":
+                            Side = BoardSide.Bottom;
+                            Layer = BoardLayer.Copper;
+                            break;
+                        case "bottommask":
+                            Side = BoardSide.Bottom;
+                            Layer = BoardLayer.SolderMask;
+                            break;
+                        case "bottompaste":
+                            Side = BoardSide.Bottom;
+                            Layer = BoardLayer.Paste;
+                            break;
+                        case "bottomsilk":
+                            Side = BoardSide.Bottom;
+                            Layer = BoardLayer.Silk;
+                            break;
+                        case "top":
+                            Side = BoardSide.Top;
+                            Layer = BoardLayer.Copper;
+                            break;
+                        case "topmask":
+                            Side = BoardSide.Top;
+                            Layer = BoardLayer.SolderMask;
+                            break;
+                        case "toppaste":
+                            Side = BoardSide.Top;
+                            Layer = BoardLayer.Paste;
+                            break;
+                        case "topsilk":
+                            Side = BoardSide.Top;
+                            Layer = BoardLayer.Silk;
+                            break;
+                        case "inner1":
+                            Side = BoardSide.Internal1;
+                            Layer = BoardLayer.Copper;
+                            break;
+                        case "inner2":
+                            Side = BoardSide.Internal2;
+                            Layer = BoardLayer.Copper;
+                            break;
+
+                        default:
+                            if (gerberfile.ToLower().Contains("outline")) { Side = BoardSide.Both; Layer = BoardLayer.Outline; }
+                            if (gerberfile.ToLower().Contains("-edge_cuts")) { Side = BoardSide.Both; Layer = BoardLayer.Outline; }
+
+                            if (gerberfile.ToLower().Contains("-b_cu")) { Side = BoardSide.Bottom; Layer = BoardLayer.Copper; }
+                            if (gerberfile.ToLower().Contains("-f_cu")) { Side = BoardSide.Top; Layer = BoardLayer.Copper; }
+                            if (gerberfile.ToLower().Contains("-b_silks")) { Side = BoardSide.Bottom; Layer = BoardLayer.Silk; }
+                            if (gerberfile.ToLower().Contains("-f_silks")) { Side = BoardSide.Top; Layer = BoardLayer.Silk; }
+                            if (gerberfile.ToLower().Contains("-b_mask")) { Side = BoardSide.Bottom; Layer = BoardLayer.SolderMask; }
+                            if (gerberfile.ToLower().Contains("-f_mask")) { Side = BoardSide.Top; Layer = BoardLayer.SolderMask; }
+                            if (gerberfile.ToLower().Contains("-b_paste")) { Side = BoardSide.Bottom; Layer = BoardLayer.Paste; }
+                            if (gerberfile.ToLower().Contains("-f_paste")) { Side = BoardSide.Top; Layer = BoardLayer.Paste; }
+
+                            if (Side == BoardSide.Unknown && Layer == BoardLayer.Unknown)
+                            {
+                                //- Kicad possibility
+                                if (filename.ToLower().Contains("outline")) { Side = BoardSide.Both; Layer = BoardLayer.Outline; }
+                                if (filename.ToLower().Contains("-edge.cuts")) { Side = BoardSide.Both; Layer = BoardLayer.Outline; }
+
+                                if (filename.ToLower().Contains("-b.cu")) { Side = BoardSide.Bottom; Layer = BoardLayer.Copper; }
+                                if (filename.ToLower().Contains("-f.cu")) { Side = BoardSide.Top; Layer = BoardLayer.Copper; }
+                                if (filename.ToLower().Contains("-b.silks")) { Side = BoardSide.Bottom; Layer = BoardLayer.Silk; }
+                                if (filename.ToLower().Contains("-f.silks")) { Side = BoardSide.Top; Layer = BoardLayer.Silk; }
+                                if (filename.ToLower().Contains("-b.mask")) { Side = BoardSide.Bottom; Layer = BoardLayer.SolderMask; }
+                                if (filename.ToLower().Contains("-f.mask")) { Side = BoardSide.Top; Layer = BoardLayer.SolderMask; }
+                                if (filename.ToLower().Contains("-b.paste")) { Side = BoardSide.Bottom; Layer = BoardLayer.Paste; }
+                                if (filename.ToLower().Contains("-f.paste")) { Side = BoardSide.Top; Layer = BoardLayer.Paste; }
+                            }
+                            break;
+
+                    }
+                    break;
+
+                case "ger":
+                    {
+                        string l = gerberfile.ToLower();
+                        List<boardset> bs = new List<boardset>();
+                        bs.Add(new boardset() { name = ".topsoldermask", side = BoardSide.Top, layer = BoardLayer.SolderMask });
+                        bs.Add(new boardset() { name = ".topsilkscreen", side = BoardSide.Top, layer = BoardLayer.Silk });
+                        bs.Add(new boardset() { name = ".toplayer", side = BoardSide.Top, layer = BoardLayer.Copper });
+                        bs.Add(new boardset() { name = ".tcream", side = BoardSide.Top, layer = BoardLayer.Paste });
+                        bs.Add(new boardset() { name = ".boardoutline", side = BoardSide.Both, layer = BoardLayer.Outline });
+                        bs.Add(new boardset() { name = ".bcream", side = BoardSide.Bottom, layer = BoardLayer.SolderMask });
+                        bs.Add(new boardset() { name = ".bottomsoldermask", side = BoardSide.Bottom, layer = BoardLayer.SolderMask });
+                        bs.Add(new boardset() { name = ".bottomsilkscreen", side = BoardSide.Bottom, layer = BoardLayer.Silk });
+                        bs.Add(new boardset() { name = ".bottomlayer", side = BoardSide.Bottom, layer = BoardLayer.Copper });
+                        bs.Add(new boardset() { name = ".bcream", side = BoardSide.Bottom, layer = BoardLayer.Paste });
+
+                        bs.Add(new boardset() { name = ".internalplane1", side = BoardSide.Internal1, layer = BoardLayer.Copper });
+                        bs.Add(new boardset() { name = ".internalplane2", side = BoardSide.Internal2, layer = BoardLayer.Copper });
+
+                        foreach (var a in bs)
+                        {
+                            if (l.Contains(a.name))
+                            {
+                                Side = a.side;
+                                Layer = a.layer;
+                            }
+                        }
+                    }
+                    break;
+
+                case "gml":
+                    Side = BoardSide.Both;
+                    Layer = BoardLayer.Mill;
+                    break;
+                case "fabrd":
+                case "oln":
+                case "gko":
+                    Side = BoardSide.Both;
+                    Layer = BoardLayer.Outline;
+                    break;
+                case "l2":
+                case "gl1":
+                    Side = BoardSide.Internal1;
+                    Layer = BoardLayer.Copper;
+                    break;
+                case "adtop":
+                    Side = BoardSide.Top;
+                    Layer = BoardLayer.Assembly;
+                    break;
+                case "adbottom":
+                    Side = BoardSide.Bottom;
+                    Layer = BoardLayer.Assembly;
+                    break;
+                case "notes":
+                    Side = BoardSide.Both;
+                    Layer = BoardLayer.Notes;
+                    break;
+                case "l3":
+
+                case "gl2":
+                    Side = BoardSide.Internal2;
+                    Layer = BoardLayer.Copper;
+                    break;
+
+                case "l4":
+                case "gbl":
+                case "l2m":
+                    Side = BoardSide.Bottom;
+                    Layer = BoardLayer.Copper;
+                    break;
+
+                case "l1":
+                case "l1m":
+                case "gtl":
+                    Side = BoardSide.Top;
+                    Layer = BoardLayer.Copper;
+                    break;
+
+                case "gbp":
+                case "spbottom":
+                    Side = BoardSide.Bottom;
+                    Layer = BoardLayer.Paste;
+                    break;
+
+                case "gtp":
+                case "sptop":
+                    Side = BoardSide.Top;
+                    Layer = BoardLayer.Paste;
+                    break;
+
+                case "gbo":
+                case "ss2":
+                case "ssbottom":
+                    Side = BoardSide.Bottom;
+                    Layer = BoardLayer.Silk;
+                    break;
+
+                case "gto":
+                case "ss1":
+                case "sstop":
+                    Side = BoardSide.Top;
+                    Layer = BoardLayer.Silk;
+                    break;
+
+                case "gbs":
+                case "sm2":
+                case "smbottom":
+                    Side = BoardSide.Bottom;
+                    Layer = BoardLayer.SolderMask;
+                    break;
+
+                case "gts":
+                case "sm1":
+                case "smtop":
+
+                    Side = BoardSide.Top;
+                    Layer = BoardLayer.SolderMask;
+                    break;
+
+                case "gb3": // oshstencils bottom outline
+                    Side = BoardSide.Both;
+                    Layer = BoardLayer.Outline;
+                    break;
+
+                case "gt3": // oshstencils top outline
+                    Side = BoardSide.Both;
+                    Layer = BoardLayer.Outline;
+                    break;
+
+                case "top":
+                    Side = BoardSide.Top;
+                    Layer = BoardLayer.Copper;
+                    break;
+
+                case "bottom":
+                case "bot":
+                    Side = BoardSide.Bottom;
+                    Layer = BoardLayer.Copper;
+                    break;
+
+                case "smb":
+                    Side = BoardSide.Bottom;
+                    Layer = BoardLayer.SolderMask;
+                    break;
+
+                case "smt":
+                    Side = BoardSide.Top;
+                    Layer = BoardLayer.SolderMask;
+                    break;
+
+                case "slk":
+                case "sst":
+                    Side = BoardSide.Top;
+                    Layer = BoardLayer.Silk;
+                    break;
+
+                case "bsk":
+                case "ssb":
+                    Side = BoardSide.Bottom;
+                    Layer = BoardLayer.Silk;
+                    break;
+
+                case "spt":
+                    Side = BoardSide.Top;
+                    Layer = BoardLayer.Paste;
+                    break;
+
+                case "spb":
+                    Side = BoardSide.Bottom;
+                    Layer = BoardLayer.Paste;
+                    break;
+                case "drill_TOP_BOTTOM":
+                case "drl":
+                case "drill":
+                case "drillnpt":
+                    Side = BoardSide.Both;
+                    Layer = BoardLayer.Drill;
+                    break;
+
+            }
+        }
+
+        public static BoardFileType FindFileType(string filename)
+        {
+            //filename = filename.ToLower();
+            List<string> unsupported = new List<string>() { "config", "exe", "dll", "png", "zip", "gif", "jpeg", "doc", "docx", "jpg", "bmp" };
+            string[] filesplit = filename.Split('.');
+            string ext = filesplit[filesplit.Count() - 1].ToLower();
+            foreach (var s in unsupported)
+            {
+                if (ext == s)
+                {
+
+                    return BoardFileType.Unsupported;
+                }
+            }
+            try
+            {
+                // var F = File.OpenText(a);
+                var F = File.ReadAllLines(filename);
+                for (int i = 0; i < F.Count(); i++)
+                {
+                    string L = F[i];
+                    if (L.Contains("%FS")) return BoardFileType.Gerber;
+                    if (L.Contains("M48")) return BoardFileType.Drill;
+                };
+
+
+            }
+            catch (Exception E)
+            {
+                if (Gerber.ExtremelyVerbose)
+                {
+                    Console.WriteLine("Exception determining filetype: {0}", E.Message);
+                }
+                return BoardFileType.Unsupported;
+            }
+
+            return BoardFileType.Unsupported;
+
+
+        }
+
+        public static BoardFileType FindFileTypeFromStream(StreamReader l, string filename)
+        {
+            filename = filename.ToLower();
+            List<string> unsupported = new List<string>() { "config", "exe", "dll", "png", "zip", "gif", "jpeg", "doc", "docx", "jpg", "bmp" };
+            string[] filesplit = filename.Split('.');
+            string ext = filesplit[filesplit.Count() - 1].ToLower();
+            foreach (var s in unsupported)
+            {
+                if (ext == s)
+                {
+
+                    return BoardFileType.Unsupported;
+                }
+            }
+            try
+            {
+                // var F = File.OpenText(a);
+                List<string> lines = new List<string>();
+                while (!l.EndOfStream)
+                {
+                    lines.Add(l.ReadLine());
+                }
+                //var F = File.ReadAllLines(filename);
+
+
+                for (int i = 0; i < lines.Count(); i++)
+                {
+                    string L = lines[i];
+                    if (L.Contains("%FS")) return BoardFileType.Gerber;
+                    if (L.Contains("M48")) return BoardFileType.Drill;
+                };
+
+
+            }
+            catch (Exception)
+            {
+                return BoardFileType.Unsupported;
+            }
+
+            return BoardFileType.Unsupported;
+
+        }
+
+        public static Bounds GetBoundingBox(List<string> generatedFiles)
+        {
+            Bounds A = new Bounds();
+
+            foreach (var a in generatedFiles)
+            {
+                ParsedGerber PLS = PolyLineSet.LoadGerberFile(a, State: new GerberParserState() { PreCombinePolygons = false });
+                A.AddBox(PLS.BoundingBox);
+            }
+            return A;
+        }
+
+        public static Color ParseColor(string color)
+        {
+            if (color == null)
+            {
+                Console.WriteLine("Error: Null color! Defaulting to lime!");
+                return Color.Lime;
+            }
+
+            switch (color.ToLower())
+            {
+                case "blue": return Color.FromArgb(0, 40, 74);
+                case "yellow": return Color.FromArgb(234, 206, 39);
+                case "green": return Color.FromArgb(68, 105, 80);
+                case "black": return Color.FromArgb(5, 5, 5);
+                case "white": return Color.FromArgb(250, 250, 250);
+                case "red": return Color.FromArgb(192, 43, 43);
+                case "silver": return Color.FromArgb(160, 160, 160);
+                case "gold": return Color.FromArgb(239, 205, 85);
+            }
+
+            try
+            {
+                return System.Drawing.ColorTranslator.FromHtml(color);
+            }
+            catch (Exception)
+            {
+                // unknown colors end up here... no need to worry, just pass it on to the default color handler which returns 0,0,0 as error-color if it too cant find anything.
+            }
+
+            return Color.FromName(color);
+        }
+
+
+        public static double RadToDeg(double inp)
+        {
+            return inp * 360.0 / (Math.PI * 2.0);
+        }
+
+        public static bool SaveDebugImage(string GerberFilename, string BitmapFilename, float dpi, Color Foreground, Color Background)
+        {
+           /* ParsedGerber PLS;
+            GerberParserState State = new GerberParserState()
+            {
+                PreCombinePolygons = false
+            };
+
+            var FileType = Gerber.FindFileType(GerberFilename);
+            Gerber.DetermineBoardSideAndLayer(GerberFilename, out State.Side, out State.Layer);
+            bool forcezero = false;
+
+            if (State.Layer == BoardLayer.Outline)
+            {
+                //    PLS.PreCombinePolygons = true;
+
+                //    forcezero = true;
+            }
+            if (FileType == BoardFileType.Drill)
+            {
+                PLS = LoadExcellonDrillFile(GerberFilename);
+            }
+            else
+            {
+                PLS = LoadGerberFile(GerberFilename, forcezero, Gerber.WriteSanitized, State);
+
+            }
+            double WidthInMM = PLS.BoundingBox.BottomRight.X - PLS.BoundingBox.TopLeft.X;
+            double HeightInMM = PLS.BoundingBox.BottomRight.Y - PLS.BoundingBox.TopLeft.Y;
+            int Width = (int)(Math.Ceiling((WidthInMM) * (dpi / 25.4)));
+            int Height = (int)(Math.Ceiling((HeightInMM) * (dpi / 25.4)));
+
+            Console.WriteLine("Progress: Exporting {0} ({2},{3}mm) to {1} ({4},{5})", GerberFilename, BitmapFilename, WidthInMM, HeightInMM, Width, Height);
+            GerberImageCreator GIC = new GerberImageCreator();
+            GIC.scale = dpi / 25.4f; // dpi
+            GIC.BoundingBox.AddBox(PLS.BoundingBox);
+
+            var Tr = GIC.BuildMatrix(Width, Height);
+
+            Bitmap B2 = GIC.RenderToBitmap(Width, Height, Tr, Foreground, Background, PLS, true);
+            if (B2 == null) return false;
+
+            var GerberLines = PolyLineSet.SanitizeInputLines(System.IO.File.ReadAllLines(GerberFilename).ToList());
+            double LastX = 0;
+            double LastY = 0;
+
+
+
+            Graphics G2 = Graphics.FromImage(B2);
+
+            GerberImageCreator.ApplyAASettings(G2);
+            //G2.Clear(Background);
+            G2.Transform = Tr.Clone();
+
+
+
+            foreach (var L in GerberLines)
+            {
+                if (L[0] != '%')
+                {
+                    GerberSplitter GS = new GerberSplitter();
+                    GS.Split(L, PLS.State.CoordinateFormat);
+
+                    if (GS.Has("G") && (int)GS.Get("G") == 3)
+                    {
+                        double X = PLS.State.CoordinateFormat.ScaleFileToMM(GS.Get("X"));
+                        double Y = PLS.State.CoordinateFormat.ScaleFileToMM(GS.Get("Y"));
+
+                        double I = PLS.State.CoordinateFormat.ScaleFileToMM(GS.Get("I"));
+                        double J = PLS.State.CoordinateFormat.ScaleFileToMM(GS.Get("J"));
+
+                        //Console.WriteLine("Counterclockwise Curve {0},{1} -> {2},{3}", LastX, LastY, X, Y);
+                        DrawCross(G2, X, Y, Color.Blue);
+                        DrawCross(G2, LastX, LastY, Color.Red);
+
+                        DrawCross(G2, LastX + I, LastY - J, Color.Yellow);
+                        DrawCross(G2, LastX + I, LastY + J, Color.Purple);
+                        DrawCross(G2, LastX - I, LastY - J, Color.Green);
+                        DrawCross(G2, LastX - I, LastY + J, Color.Orange);
+
+                    }
+
+                    if (GS.Has("X")) LastX = PLS.State.CoordinateFormat.ScaleFileToMM(GS.Get("X"));
+                    if (GS.Has("Y")) LastY = PLS.State.CoordinateFormat.ScaleFileToMM(GS.Get("Y"));
+                }
+
+            }
+
+
+            B2.Save(BitmapFilename);*/
+            return true;
+        }
+
+        public static bool SaveGerberFileToImage(string GerberFilename, string BitmapFilename, float dpi, Color Foreground, Color Background)
+        {
+            try
+            {
+                ParsedGerber PLS;
+                GerberParserState State = new GerberParserState()
+                {
+                    PreCombinePolygons = false
+                };
+
+                var FileType = Gerber.FindFileType(GerberFilename);
+                Gerber.DetermineBoardSideAndLayer(GerberFilename, out State.Side, out State.Layer);
+                bool forcezero = false;
+
+                if (State.Layer == BoardLayer.Outline)
+                {
+                    //    PLS.PreCombinePolygons = true;
+                    //    forcezero = true;
+                }
+                if (FileType == BoardFileType.Drill)
+                {
+                    PLS = PolyLineSet.LoadExcellonDrillFile(GerberFilename);
+                }
+                else
+                {
+                    PLS = PolyLineSet.LoadGerberFile(GerberFilename, forcezero, Gerber.WriteSanitized, State);
+
+                }
+                double WidthInMM = PLS.BoundingBox.BottomRight.X - PLS.BoundingBox.TopLeft.X;
+                double HeightInMM = PLS.BoundingBox.BottomRight.Y - PLS.BoundingBox.TopLeft.Y;
+                int Width = (int)(Math.Ceiling((WidthInMM) * (dpi / 25.4)));
+                int Height = (int)(Math.Ceiling((HeightInMM) * (dpi / 25.4)));
+
+                Console.WriteLine("Progress: Exporting {0} ({2},{3}mm) to {1} ({4},{5})", GerberFilename, BitmapFilename, WidthInMM, HeightInMM, Width, Height);
+             /*   GerberImageCreator GIC = new GerberImageCreator();
+                GIC.scale = dpi / 25.4f; // dpi
+                GIC.BoundingBox.AddBox(PLS.BoundingBox);
+
+                var Tr = GIC.BuildMatrix(Width, Height);
+                Bitmap B2 = GIC.RenderToBitmap(Width, Height, Tr, Foreground, Background, PLS, true);
+                if (B2 == null) return false;
+                B2.Save(BitmapFilename);*/
+                return true;
+            }
+            catch (Exception E)
+            {
+                Console.WriteLine("Error: Errors while writing bitmap {0} for gerberfile {1} at dpi {2}:", BitmapFilename, GerberFilename, dpi);
+                while (E != null)
+                {
+                    Console.WriteLine("Error: \t{0}", E.Message);
+                    E = E.InnerException;
+                }
+                return false;
+            }
+
+        }
+
+        public static string ToFloatingPointString(double value)
+        {
+            return ToFloatingPointString(value, NumberFormatInfo.CurrentInfo);
+        }
+
         public static string ToFloatingPointString(double value, NumberFormatInfo formatInfo)
         {
             string result = value.ToString("r", NumberFormatInfo.InvariantInfo);
@@ -356,6 +846,99 @@ namespace Kicad_gerber_panelizer
             return result;
         }
 
+        public static void WriteAllLines(string filename, List<string> lines)
+        {
+
+            File.WriteAllText(filename, string.Join(Gerber.LineEnding, lines));
+
+
+        }
+
+        internal static double ParseDouble(string inp)
+        {
+            return double.Parse(inp, NumberStyles.Any, CultureInfo.InvariantCulture);
+        }
+
+        internal static bool TryParseDouble(string inp, out double N)
+        {
+            inp = inp.Replace("*", "");
+            return double.TryParse(inp, NumberStyles.Any, CultureInfo.InvariantCulture, out N);
+        }
+
+        private static void DrawCross(Graphics G2, double X, double Y, Color C)
+        {
+            float S = 0.2f;
+            Pen P = new Pen(C, 1.0f);
+            G2.DrawLine(P, (float)X - S, (float)Y - S, (float)X + S, (float)Y - S);
+            G2.DrawLine(P, (float)X - S, (float)Y + S, (float)X + S, (float)Y + S);
+            G2.DrawLine(P, (float)X - S, (float)Y - S, (float)X - S, (float)Y + S);
+            G2.DrawLine(P, (float)X + S, (float)Y - S, (float)X + S, (float)Y + S);
+
+        }
+
+        private static double LimitPos2PI(double dA)
+        {
+            while (dA < -Math.PI / 2) dA += Math.PI * 2;
+            while (dA >= Math.PI / 2) dA -= Math.PI * 2;
+            return dA;
+        }
+
+        class boardset
+        {
+            public BoardLayer layer;
+            public string name; public BoardSide side;
+        };
+
+        class QuadR
+        {
+            public double CX;
+            public double CY;
+            public double D1 = 0;
+            public double D2 = 0;
+            public double Diff;
+            public double DRat = 0;
+            public double E;
+            public double S;
+            internal void Calc(double LastX, double LastY, double X, double Y)
+            {
+                double CX1 = LastX - CX;
+                double CX2 = X - CX;
+                double CY1 = LastY - CY;
+                double CY2 = Y - CY;
+
+                D1 = Math.Sqrt(CX1 * CX1 + CY1 * CY1);
+                D2 = Math.Sqrt(CX2 * CX2 + CY2 * CY2);
+                if (D2 != 0) DRat = D1 / D2;
+
+                S = Math.Atan2(LastY - CY, LastX - CX);
+                E = Math.Atan2(Y - CY, X - CX);
+
+            }
+
+            internal void FixClockwise()
+            {
+                //       while (S < E) S += Math.PI * 2;
+                Diff = S - E;
+                while (Diff > Math.PI) Diff -= Math.PI * 2;
+                //              Console.WriteLine("clock: {0:N2}", Gerber.RadToDeg(Diff));
+            }
+
+            internal void FixCounterClockwise()
+            {
+                while (S > E) S -= Math.PI * 2;
+                while (S < 0)
+                {
+                    S += Math.PI * 2.0;
+                    E += Math.PI * 2.0;
+                }
+                Diff = E - S;
+
+                // while (Diff < 0) Diff += Math.PI * 2.0;
+                //                Console.WriteLine("counterclock: {0:N2}", Gerber.RadToDeg(Diff));
+
+            }
+        }
+        #region GERBERCOMMANDSTRINGS
         public static string BuildOutlineApertureMacro(string name, List<PointD> Vertices, GerberNumberFormat format)
         {
             string res = "%AM" + name + "*" + Gerber.LineEnding;
@@ -369,9 +952,19 @@ namespace Kicad_gerber_panelizer
             return res;
         }
 
-        public static string WriteMacroStart(string name)
+        public static string Flash(PointD t, GerberNumberFormat GNF)
         {
-            return "%AM" + name + "*" + Gerber.LineEnding;
+            return String.Format("X{0}Y{1}D03*", GNF.Format(GNF._ScaleMMToFile(t.X)), GNF.Format(GNF._ScaleMMToFile(t.Y)));
+        }
+
+        public static string LineTo(PointD t, GerberNumberFormat GNF)
+        {
+            return String.Format("X{0}Y{1}D01*", GNF.Format(GNF._ScaleMMToFile(t.X)), GNF.Format(GNF._ScaleMMToFile(t.Y)));
+        }
+
+        public static string MoveTo(PointD t, GerberNumberFormat GNF)
+        {
+            return String.Format("X{0}Y{1}D02*", GNF.Format(GNF._ScaleMMToFile(t.X)), GNF.Format(GNF._ScaleMMToFile(t.Y)));
         }
         public static string WriteMacroEnd()
         {
@@ -391,238 +984,10 @@ namespace Kicad_gerber_panelizer
             return res;
         }
 
-        internal static double ParseDouble(string inp)
+        public static string WriteMacroStart(string name)
         {
-            return double.Parse(inp, NumberStyles.Any, CultureInfo.InvariantCulture);
+            return "%AM" + name + "*" + Gerber.LineEnding;
         }
-
-        public class GerberBlock
-        {
-            public bool Header;
-            public List<string> Lines = new List<string>();
-        }
-
-        public static List<string> SanitizeInputLines(List<String> inputlines, string SanitizedFile = "")
-        {
-            List<GerberBlock> Blocks = new List<GerberBlock>();
-            bool HeaderActive = false;
-            GerberBlock CurrentBlock = null;
-            GerberBlock PreviousBlock = null;
-            List<String> lines = new List<string>();
-            string currentline = "";
-            bool LastWasStar = false;
-
-            CurrentBlock = new GerberBlock();
-            CurrentBlock.Header = false;
-            Blocks.Add(CurrentBlock);
-            bool AddToPrevious = false;
-            foreach (var ll in inputlines)
-            {
-
-                List<String> CadenceSplit = new List<string>();
-                string T = ll.Trim();
-                if (T.StartsWith("%") && T.EndsWith("%") && T.Contains("*") && (T.StartsWith("%AM") == false))
-                {
-                    T = T.Substring(1, T.Length - 2);
-                    var s = T.Split('*');
-                    if (s.Count() > 1)
-                    {
-                        foreach (var sl in s)
-                        {
-                            if (sl.Length > 0)
-                            {
-                                CadenceSplit.Add("%" + sl + "*%");
-                            }
-
-                        }
-                        if (Gerber.ExtremelyVerbose)
-                        {
-                            if (CadenceSplit.Count > 1)
-                            {
-                                Console.WriteLine("Cadence format fixing:");
-                                Console.WriteLine("original: {0}", ll);
-                                Console.WriteLine("split:");
-                                foreach (var sss in CadenceSplit)
-                                {
-                                    Console.WriteLine("     {0}", sss);
-                                }
-                            }
-                        }
-                    }
-                    else
-                    {
-                        CadenceSplit.Add(ll);
-                    }
-                }
-                else
-                {
-                    CadenceSplit.Add(ll);
-
-                }
-
-                foreach (var l in CadenceSplit)
-                {
-
-                    foreach (var c in l)
-                    {
-                        AddToPrevious = false;
-                        GerberBlock Last = CurrentBlock;
-                        if (c == '%')
-                        {
-                            if (HeaderActive == false)
-                            {
-                                HeaderActive = true;
-
-                            }
-                            else
-                            {
-                                if (CurrentBlock.Lines.Count == 0)
-                                {
-                                    CurrentBlock.Lines.Add("");
-                                }
-                                CurrentBlock.Lines[CurrentBlock.Lines.Count - 1] += '%';
-                                AddToPrevious = true;
-                                HeaderActive = false;
-                            }
-                            PreviousBlock = CurrentBlock;
-                            CurrentBlock = null;
-                        }
-                        //     if (LastWasStar && c == '%')
-                        //    {
-                        //       Last.Lines[Last.Lines.Count -1] += '%';
-                        //      lines[lines.Count - 1] += '%';
-                        //  }
-                        //  else
-                        //  {
-
-                        if (AddToPrevious == false)
-                        {
-                            if (CurrentBlock == null)
-                            {
-                                CurrentBlock = new GerberBlock();
-                                CurrentBlock.Header = HeaderActive;
-                                Blocks.Add(CurrentBlock);
-
-                            }
-                            currentline += c;
-                            //  }
-                            if (HeaderActive && c == '*')
-                            {
-                                LastWasStar = true;
-                                CurrentBlock.Lines.Add(currentline);
-                                lines.Add(currentline);
-                                currentline = "";
-                            }
-                            else
-                            {
-                                if (c == '*')
-                                {
-                                    LastWasStar = true;
-                                    CurrentBlock.Lines.Add(currentline);
-                                    lines.Add(currentline);
-                                    currentline = "";
-
-                                }
-                                else
-                                {
-                                    LastWasStar = false;
-
-                                }
-                            }
-                        }
-
-                    }
-                    if (HeaderActive)
-                    {
-
-                    }
-                    else
-                    {
-                        if (currentline.Length > 0)
-                        {
-                            if (CurrentBlock == null)
-                            {
-                                CurrentBlock = new GerberBlock();
-                                CurrentBlock.Header = HeaderActive;
-                                Blocks.Add(CurrentBlock);
-
-                            }
-                            CurrentBlock.Lines.Add(currentline);
-                            lines.Add(currentline);
-                            currentline = "";
-                        }
-                    }
-                }
-            }
-            if (currentline.Length > 0)
-            {
-                CurrentBlock.Lines.Add(currentline);
-                lines.Add(currentline);
-            }
-
-            List<String> reslines = new List<string>();
-            //  foreach ( var a in lines)
-            // {
-            //     if (a.Length > 0) reslines.Add(a);
-
-            // }
-
-            foreach (var b in Blocks)
-            {
-                foreach (var a in b.Lines)
-                {
-                    string B = a.Trim().Replace(Gerber.LineEnding + Gerber.LineEnding, Gerber.LineEnding);
-                    if (B.Trim().Length > 0)
-                    {
-                        if (b.Header)
-                        {
-                            //                        string FinalLine = a.Replace("%", "").Replace("*", "").Trim();
-
-                            reslines.Add(a.Trim());
-                        }
-                        else
-                        {
-                            reslines.Add(a.Trim());
-                        }
-                    }
-                }
-            }
-            DumpSanitizedFileToLog(SanitizedFile, Blocks, reslines);
-
-            return reslines;
-        }
-
-        private static void DumpSanitizedFileToLog(string SanitizedFile, List<GerberBlock> Blocks, List<String> lines)
-        {
-            if (SanitizedFile.Length > 0)
-            {
-                Gerber.WriteAllLines(SanitizedFile, lines);
-                List<string> l2 = new List<string>();
-                foreach (var b in Blocks)
-                {
-
-                    foreach (var l in b.Lines)
-                    {
-                        if (b.Header == true)
-                        {
-                            l2.Add("HEAD " + l);
-                        }
-                        else
-                        {
-                            l2.Add("BODY " + l);
-                        }
-                    }
-
-                }
-                Gerber.WriteAllLines(SanitizedFile + ".txt", l2);
-            }
-        }
-
-        public static void WriteAllLines(string filename, List<string> lines)
-        {
-
-            File.WriteAllText(filename, string.Join(Gerber.LineEnding, lines));
-
-        }
+        #endregion
     }
 }

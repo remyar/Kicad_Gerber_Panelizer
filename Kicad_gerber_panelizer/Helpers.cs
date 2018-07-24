@@ -315,7 +315,7 @@ namespace Kicad_gerber_panelizer
         private static List<PathDefWithClosed> StripOverlaps(List<PathDefWithClosed> Paths)
         {
             List<PathDefWithClosed> Res = new List<PathDefWithClosed>();
-           /* QuadTreeNode Root = new QuadTreeNode();
+            QuadTreeNode Root = new QuadTreeNode();
             PolyLineSet.Bounds B = new PolyLineSet.Bounds();
             for (int i = 0; i < Paths.Count; i++)
             {
@@ -389,7 +389,7 @@ namespace Kicad_gerber_panelizer
                         Console.WriteLine("{0}: skipped!", i);
                     }
                 }
-            }*/
+            }
             return Res;
         }
 
@@ -424,7 +424,7 @@ namespace Kicad_gerber_panelizer
         private static int FindNextMerge(List<PathDefWithClosed> Paths, out int highestnomatch, int startat = 0)
         {
            highestnomatch = 0;
-           /*  QuadTreeNode Root = new QuadTreeNode();
+             QuadTreeNode Root = new QuadTreeNode();
             PolyLineSet.Bounds B = new PolyLineSet.Bounds();
             for (int i = startat; i < Paths.Count; i++)
             {
@@ -590,13 +590,12 @@ namespace Kicad_gerber_panelizer
 
                 }
             }
-            */
             return 0;
         }
 
         private static int FindNextClosest(List<PathDefWithClosed> Paths)
         {
-           /* QuadTreeNode Root = new QuadTreeNode();
+            QuadTreeNode Root = new QuadTreeNode();
             PolyLineSet.Bounds B = new PolyLineSet.Bounds();
             for (int i = 0; i < Paths.Count; i++)
             {
@@ -780,7 +779,7 @@ namespace Kicad_gerber_panelizer
 
                 }
             }
-            */
+            
             return 0;
 
         }

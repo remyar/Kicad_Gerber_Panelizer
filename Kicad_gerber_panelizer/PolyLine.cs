@@ -37,7 +37,7 @@ namespace Kicad_gerber_panelizer
                 Add(cx + Math.Cos(p) * width / 2.0, cy + Math.Sin(p) * height / 2.0);
             }
         }
-        public void ArcTo(PointD Target, PointD Center, Kicad_gerber_panelizer.InterpolationMode Dir = Kicad_gerber_panelizer.InterpolationMode.ClockWise)
+        public void ArcTo(PointD Target, PointD Center, InterpolationMode Dir = InterpolationMode.ClockWise)
         {
 
             double LastX = 0;

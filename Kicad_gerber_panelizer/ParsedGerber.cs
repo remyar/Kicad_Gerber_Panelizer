@@ -115,7 +115,7 @@ namespace Kicad_gerber_panelizer
         public List<PolyLine> DisplayShapes = new List<PolyLine>();
         public List<PolyLine> OutlineShapes = new List<PolyLine>();
 
-        //--public PolyLineSet.Bounds BoundingBox = new PolyLineSet.Bounds();
+        public Bounds BoundingBox = new Bounds();
         public BoardSide Side;
         public BoardLayer Layer;
         public string Name;
@@ -132,10 +132,10 @@ namespace Kicad_gerber_panelizer
 
         public void CalcPathBounds()
         {
-           /* BoundingBox.Reset();
+            BoundingBox.Reset();
             BoundingBox.AddPolyLines(Shapes);
             BoundingBox.AddPolyLines(DisplayShapes);
-            BoundingBox.AddPolyLines(OutlineShapes);*/
+            BoundingBox.AddPolyLines(OutlineShapes);
         }
 
         public void FixPolygonWindings()

@@ -11,48 +11,105 @@ namespace Kicad_gerber_panelizer
     class Treeview
     {
         private TreeView _tv;
-
+        GerberPanelizerParent TargetHost;
         private TreeNode Gerbers;
         private TreeNode BreakTabs;
         private TreeNode RootNode;
 
-        private List<String> projectList  = new List<String>();
-
-        public Treeview(TreeView tv)
+        public Treeview()
         {
-            _tv = tv;
-
-            update();
-        }
-
-        public void addProject(Gerber_utils project)
-        {
-            project.setName(Path.GetFileNameWithoutExtension(project.getProjectPath()) + "(" + (projectList.Count + 1).ToString() + ")");
-
-            projectList.Add(project.getName());
-
-            update();
-        }
-
-        public void update()
-        {
-            _tv.Nodes.Clear();
-            TreeNode[] projectNode = new TreeNode[projectList.Count];
-            int idx = 0;
-            foreach (string pl in projectList)
-            {
-                projectNode[idx] = new TreeNode(pl);
-                idx++;
-            }
-
-            Gerbers = new TreeNode("Gerbers", projectNode);
-
+            Gerbers = new TreeNode("Gerbers");
             BreakTabs = new TreeNode("Breaktabs");
 
             TreeNode[] array = new TreeNode[] { Gerbers, BreakTabs };
 
             RootNode = new TreeNode("Board", array);
+
+        }
+
+        public void setTreeView(TreeView tv)
+        {
+            _tv = tv;
+
             _tv.Nodes.Add(RootNode);
+            _tv.ExpandAll();
+            _tv.Enabled = false;
+
+        }
+
+        class InstanceTreeNode : TreeNode
+        {
+            public AngledThing TargetInstance;
+
+            public InstanceTreeNode(AngledThing GI)
+                : base("instance")
+            {
+                TargetInstance = GI;
+                Text = ToString();
+            }
+            public override string ToString()
+            {
+                if (TargetInstance.GetType() == typeof(GerberInstance))
+                {
+                    return String.Format("Instance: {0} {1},{2} {3}", Path.GetFileNameWithoutExtension((TargetInstance as GerberInstance).GerberPath), TargetInstance.Center.X, TargetInstance.Center.Y, TargetInstance.Angle);
+                }
+                else
+                {
+                    return "tab";
+                }
+            }
+        }
+
+        class GerberFileNode : TreeNode
+        {
+            public string pPath;
+            public GerberFileNode(string path)
+                : base("gerber")
+            {
+                pPath = path;
+                Text = ToString();
+            }
+            public override string ToString()
+            {
+                return Path.GetFileNameWithoutExtension(pPath);
+            }
+        }
+
+        public void BuildTree(GerberPanelizerParent Parent, GerberLayoutSet S)
+        {
+            TargetHost = Parent;
+            if (TargetHost == null) { _tv.Enabled = false; return; } else { _tv.Enabled = true; };
+            while (Gerbers.Nodes.Count > 0)
+            {
+                Gerbers.Nodes[0].Remove();
+            }
+            while (BreakTabs.Nodes.Count > 0)
+            {
+                BreakTabs.Nodes[0].Remove();
+            }
+            foreach (var a in S.LoadedOutlines)
+            {
+                Gerbers.Nodes.Add(new GerberFileNode(a));
+            }
+
+            foreach (var a in S.Instances)
+            {
+                foreach (GerberFileNode t in Gerbers.Nodes)
+                {
+                    if (t.pPath == a.GerberPath)
+                    {
+                        t.Nodes.Add(new InstanceTreeNode(a));
+                    }
+                }
+
+            }
+
+
+            foreach (var t in S.Tabs)
+            {
+                BreakTabs.Nodes.Add(new InstanceTreeNode(t));
+            }
+
             _tv.ExpandAll();
         }
     }

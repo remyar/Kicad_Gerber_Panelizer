@@ -8,74 +8,6 @@ using System.Windows.Forms;
 
 namespace Kicad_gerber_panelizer
 {
-    public class GerberInstance : AngledThing
-    {
-        public string GerberPath;
-        public bool Generated = false;
-
-        [System.Xml.Serialization.XmlIgnore]
-        public List<PolyLine> TransformedOutlines = new List<PolyLine>();
-
-        [System.Xml.Serialization.XmlIgnore]
-        public List<List<PolyLine>> OffsetOutlines = new List<List<PolyLine>>();
-
-        [System.Xml.Serialization.XmlIgnore]
-        internal float LastAngle;
-        [System.Xml.Serialization.XmlIgnore]
-        internal PointD LastCenter;
-
-        [System.Xml.Serialization.XmlIgnore]
-        public List<BreakTab> Tabs = new List<BreakTab>();
-
-        [System.Xml.Serialization.XmlIgnore]
-        public PolyLineSet.Bounds BoundingBox = new PolyLineSet.Bounds();
-        internal void CreateOffsetLines(double extradrilldistance)
-        {
-            OffsetOutlines = new List<List<PolyLine>>(TransformedOutlines.Count);
-            for (int i = 0; i < TransformedOutlines.Count; i++)
-            {
-                var L = new List<PolyLine>();
-                Polygons clips = new Polygons();
-                var poly = TransformedOutlines[i].toPolygon();
-                bool winding = Clipper.Orientation(poly);
-
-                clips.Add(poly);
-                double offset = 0.25 * 100000.0f + extradrilldistance;
-                if (winding == false) offset *= -1;
-                Polygons clips2 = Clipper.OffsetPolygons(clips, offset, JoinType.jtRound);
-                foreach (var a in clips2)
-                {
-                    PolyLine P = new PolyLine();
-                    P.fromPolygon(a);
-                    L.Add(P);
-                }
-
-                OffsetOutlines.Add(L);
-            }
-
-        }
-
-        public void RebuildTransformed(GerberOutline gerberOutline, double extra)
-        {
-            BoundingBox.Reset();
-            LastAngle = Angle;
-            LastCenter = new PointD(Center.X, Center.Y);
-            TransformedOutlines = new List<PolyLine>();
-            var GO = gerberOutline;
-            foreach (var b in GO.TheGerber.OutlineShapes)
-            {
-                PolyLine PL = new PolyLine();
-                PL.FillTransformed(b, new PointD(Center), Angle);
-                TransformedOutlines.Add(PL);
-                BoundingBox.AddPolyLine(PL);
-            }
-            CreateOffsetLines(extra);
-
-
-
-        }
-    }
-
     class Gerber_utils
     {
         private PictureBox _pb;
@@ -135,5 +67,28 @@ namespace Kicad_gerber_panelizer
         {
             return filePath;
         }
+
+
+        public static ParsedGerber LoadGerberFile(string gerberfile, bool forcezerowidth = false, bool writesanitized = false, GerberParserState State = null)
+        {
+            if (State == null) State = new GerberParserState();
+
+            Gerber.DetermineBoardSideAndLayer(gerberfile, out State.Side, out State.Layer);
+
+            using (StreamReader sr = new StreamReader(gerberfile))
+            {
+                return ProcessStream(gerberfile, forcezerowidth, writesanitized, State, sr);
+            }
+        }
+
+        public static ParsedGerber LoadGerberFileFromStream(StreamReader sr, string originalfilename, bool forcezerowidth = false, bool writesanitized = false, GerberParserState State = null)
+        {
+            if (State == null) State = new GerberParserState();
+
+            Gerber.DetermineBoardSideAndLayer(originalfilename, out State.Side, out State.Layer);
+            return ProcessStream(originalfilename, forcezerowidth, writesanitized, State, sr);
+
+        }
+
     }
 }
