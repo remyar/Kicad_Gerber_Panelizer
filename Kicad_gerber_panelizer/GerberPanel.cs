@@ -647,7 +647,7 @@ namespace Kicad_gerber_panelizer
                         DrawShape(G, active ? ActiveP : P, Shape);
                     }*/
 
-                    /*
+                    
                     var width = (int)(Math.Ceiling(a.TheGerber.BoundingBox.BottomRight.X - a.TheGerber.BoundingBox.TopLeft.X));
                     var height = (int)(Math.Ceiling(a.TheGerber.BoundingBox.BottomRight.Y - a.TheGerber.BoundingBox.TopLeft.Y));
 
@@ -659,10 +659,11 @@ namespace Kicad_gerber_panelizer
                     if (Ext.X > width) Z = width / Ext.X;
                     if (Ext.Y * Z > height) Z = height / Ext.Y;
 
-                    G.DrawString(Path.GetFileName(GI.GerberPath), new Font("Arial", (float)(Z)), new SolidBrush(Color.FromArgb((byte)(A * 255.0), (byte)(R * 255.0), (byte)(Gf * 255.0), (byte)(B * 255.0))), new PointF((float)ox, (float)oy));
+                    PointF length = G.MeasureString(Path.GetFileName(GI.GerberPath), new Font("Arial", (float)(Z * 8))).ToPointF();
+                    G.DrawString(Path.GetFileName(GI.GerberPath), new Font("Arial", (float)(Z * 8)), new SolidBrush(Color.FromArgb((byte)(A * 255.0), (byte)(R * 255.0), (byte)(Gf * 255.0), (byte)(B * 255.0))), new PointF((float)ox - length.X / 2, (float)oy - length.Y / 2));
                    // G.DrawString(new PointD(ox, oy), Path.GetFileName(GI.GerberPath), Z * 30, true, R, Gf, B, A);
 
-                    */
+                    
                 }
 
                 G.Transform = T;
