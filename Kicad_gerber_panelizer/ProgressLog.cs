@@ -5,7 +5,7 @@ using System.Text;
 
 namespace Kicad_gerber_panelizer
 {
-    public class ProgressLog
+  /*  public interface ProgressLog
     {
         List<string> TextlinesToAdd = new List<string>();
         float fProgress = 0;
@@ -22,5 +22,5 @@ namespace Kicad_gerber_panelizer
             if (progress == -1) progress = fProgress;
                 AddLog(text, progress);
         }
-    }
+    }*/
 }

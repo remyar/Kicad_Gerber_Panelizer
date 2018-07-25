@@ -848,10 +848,7 @@ namespace Kicad_gerber_panelizer
 
         public static void WriteAllLines(string filename, List<string> lines)
         {
-
             File.WriteAllText(filename, string.Join(Gerber.LineEnding, lines));
-
-
         }
 
         internal static double ParseDouble(string inp)

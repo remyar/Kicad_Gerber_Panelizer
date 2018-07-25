@@ -88,12 +88,24 @@
     <Compile Include="PolyLine.cs" />
     <Compile Include="PolyLineSet.cs" />
     <Compile Include="Program.cs" />
+    <Compile Include="Progress.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Progress.designer.cs">
+      <DependentUpon>Progress.cs</DependentUpon>
+    </Compile>
     <Compile Include="ProgressLog.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="QuadTree.cs" />
     <Compile Include="RectanglePacker.cs" />
     <Compile Include="Treeview.cs" />
     <Compile Include="V3.cs" />
+    <EmbeddedResource Include="GerberPanelizerParent.resx">
+      <DependentUpon>GerberPanelizerParent.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Progress.resx">
+      <DependentUpon>Progress.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>

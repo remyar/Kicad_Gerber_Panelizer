@@ -112,5 +112,25 @@ namespace Kicad_gerber_panelizer
 
             _tv.ExpandAll();
         }
+
+        public void addInstanceToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            string path = "";
+            if (_tv.SelectedNode.GetType() == typeof(GerberFileNode))
+            {
+                path = (_tv.SelectedNode as GerberFileNode).pPath;
+            }
+            if (_tv.SelectedNode.GetType() == typeof(InstanceTreeNode))
+            {
+                if ((_tv.SelectedNode as InstanceTreeNode).TargetInstance.GetType() == typeof(GerberInstance))
+                {
+                    path = ((_tv.SelectedNode as InstanceTreeNode).TargetInstance as GerberInstance).GerberPath;
+                }
+            }
+            if (path.Length > 0)
+            {
+              //  TargetHost.AddInstance(path, new PointD(0, 0));
+            }
+        }
     }
 }

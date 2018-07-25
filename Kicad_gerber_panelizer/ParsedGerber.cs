@@ -193,11 +193,10 @@ namespace Kicad_gerber_panelizer
         internal PolyLine GetBoundingPolyLine()
         {
             PolyLine Boundary = new PolyLine();
-/*
             Boundary.Add(BoundingBox.TopLeft.X, BoundingBox.TopLeft.Y);
             Boundary.Add(BoundingBox.BottomRight.X, BoundingBox.TopLeft.Y);
             Boundary.Add(BoundingBox.BottomRight.X, BoundingBox.BottomRight.Y);
-            Boundary.Add(BoundingBox.TopLeft.X, BoundingBox.BottomRight.Y);*/
+            Boundary.Add(BoundingBox.TopLeft.X, BoundingBox.BottomRight.Y);
             Boundary.Close();
 
             return Boundary;
@@ -206,7 +205,7 @@ namespace Kicad_gerber_panelizer
         public void Normalize()
         {
             // return;
-         /*   TranslationSinceLoad.X -= BoundingBox.TopLeft.X;
+            TranslationSinceLoad.X -= BoundingBox.TopLeft.X;
             TranslationSinceLoad.Y -= BoundingBox.TopLeft.Y;
 
             foreach (var a in DisplayShapes)
@@ -218,14 +217,12 @@ namespace Kicad_gerber_panelizer
             {
                 a.MoveBack(BoundingBox.TopLeft);
             }
-            */
         }
 
         public void BuildBoundary()
         {
             CalcPathBounds();
             DisplayShapes.Insert(0, GetBoundingPolyLine());
-
         }
 
         internal Tuple<double, PolyLine> FindLargestPolygon()

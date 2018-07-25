@@ -13,6 +13,12 @@ using TriangleNet.Geometry;
 
 namespace Kicad_gerber_panelizer
 {
+    public interface ProgressLog
+    {
+        void AddString(string text, float progress = -1);
+    }
+
+
     public class GerberPanel
     {
         public GerberLayoutSet TheSet;
@@ -618,15 +624,14 @@ namespace Kicad_gerber_panelizer
 
                     foreach (var Shape in a.TheGerber.OutlineShapes)
                     {
-
-                        if (Shape.Hole == false)
+                      /*  if (Shape.Hole == false)
                         {
                             //FillShape(G, new SolidBrush(Color.FromArgb(100, 255, 255, 255)), Shape);
                         }
                         else
                         {
                             //             FillShape(G, new SolidBrush(Color.FromArgb(100, 0, 0, 0)), Shape);   
-                        }
+                        }*/
                         if (active)
                         {
                             DrawShape(G, ActivePD, Shape);
@@ -637,10 +642,12 @@ namespace Kicad_gerber_panelizer
                             DrawShape(G, active ? ActiveP : P, Shape);
                         }
                     }
-                    foreach (var Shape in a.TheGerber.DisplayShapes)
+                  /*  foreach (var Shape in a.TheGerber.DisplayShapes)
                     {
                         DrawShape(G, active ? ActiveP : P, Shape);
-                    }
+                    }*/
+
+                    /*
                     var width = (int)(Math.Ceiling(a.TheGerber.BoundingBox.BottomRight.X - a.TheGerber.BoundingBox.TopLeft.X));
                     var height = (int)(Math.Ceiling(a.TheGerber.BoundingBox.BottomRight.Y - a.TheGerber.BoundingBox.TopLeft.Y));
 
@@ -655,16 +662,16 @@ namespace Kicad_gerber_panelizer
                     G.DrawString(Path.GetFileName(GI.GerberPath), new Font("Arial", (float)(Z)), new SolidBrush(Color.FromArgb((byte)(A * 255.0), (byte)(R * 255.0), (byte)(Gf * 255.0), (byte)(B * 255.0))), new PointF((float)ox, (float)oy));
                    // G.DrawString(new PointD(ox, oy), Path.GetFileName(GI.GerberPath), Z * 30, true, R, Gf, B, A);
 
-
+                    */
                 }
 
                 G.Transform = T;
-                if (active)
+           /*     if (active)
                 {
                     DrawMarker(false, G, new PointD(b.Center), 1, PW, ActivePD);
                     DrawMarker(false, G, new PointD(b.Center), 1, PW, ActiveP);
 
-                }
+                }*/
 
 
 
@@ -710,40 +717,10 @@ namespace Kicad_gerber_panelizer
         public Bitmap DrawBoardBitmap(float PW = 1/*, GraphicsInterface G = null*/, int targetwidth = 0, int targetheight = 0, AngledThing SelectedInstance = null, AngledThing Hoverinstance = null, double snapdistance = 1)
         {
             Bitmap img = new Bitmap(targetwidth, targetheight);
-
-            using (Graphics gfx = Graphics.FromImage(img))
-            using (SolidBrush brush = new SolidBrush(Color.FromArgb(255, 255, 255)))
-            {
-                gfx.FillRectangle(brush, 0, 0, img.Width, img.Height);
-            }
-
-
             Graphics G = Graphics.FromImage(img);
-
-            //G.Clear(System.Drawing.ColorTranslator.FromHtml("#888885"));
-
-            RectangleF RR = G.ClipBounds;
-
-            //SolidBrush brush = new SolidBrush(System.Drawing.ColorTranslator.FromHtml("#f5f4e8"));
-            //G.FillRectangle(brush , 0, 0, (int)TheSet.Width, (int)TheSet.Height);
-         /*   if (G.IsFast)
-            {
-                G.FillRectangle(System.Drawing.ColorTranslator.FromHtml("#f5f4e8"), 0, 0, (int)TheSet.Width, (int)TheSet.Height);
-               // Helpers.DrawMMGrid(G, PW, (float)TheSet.Width, (float)TheSet.Height, (float)snapdistance, (float)snapdistance * 10.0f);
-
-            }
-            else*/
-                if ((MMGrid == null || MMGrid.Width != targetwidth || MMGrid.Height != targetheight))
-            {
-                MMGrid = new Bitmap(targetwidth, targetheight);
-                Graphics G2 = Graphics.FromImage(MMGrid);
-                G2.SmoothingMode = SmoothingMode.HighQuality;
-                G2.Transform = G.Transform;
-             //   Helpers.DrawMMGrid(new GraphicsGraphicsInterface(G2), PW, (float)TheSet.Width, (float)TheSet.Height, (float)snapdistance, (float)snapdistance * 10.0f);
-                Console.WriteLine("building new millimeter grid!");
-            }
+            G.ScaleTransform(5, 5);
+            G.Clear(Color.White);
             G.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.High;
-            G.DrawImage(MMGrid, RR.Left, RR.Bottom, RR.Width, -RR.Height);
 
             foreach (var b in TheSet.Tabs)
             {
@@ -758,7 +735,6 @@ namespace Kicad_gerber_panelizer
                 }
             }
 
-
             foreach (var b in TheSet.Instances)
             {
                 RenderInstance(G, PW, Color.DarkGray, b);
@@ -768,7 +744,8 @@ namespace Kicad_gerber_panelizer
             {
                 RenderInstanceHoles(G, PW, Color.DarkGray, b);
             }
-            Pen OO = new Pen(Color.Orange, PW) { LineJoin = System.Drawing.Drawing2D.LineJoin.Round, EndCap = System.Drawing.Drawing2D.LineCap.Round, StartCap = System.Drawing.Drawing2D.LineCap.Round };
+
+           /* Pen OO = new Pen(Color.Orange, PW) { LineJoin = System.Drawing.Drawing2D.LineJoin.Round, EndCap = System.Drawing.Drawing2D.LineCap.Round, StartCap = System.Drawing.Drawing2D.LineCap.Round };
 
             Pen OO3 = new Pen(Color.FromArgb(140, 40, 40, 30), PW) { LineJoin = System.Drawing.Drawing2D.LineJoin.Round, EndCap = System.Drawing.Drawing2D.LineCap.Round, StartCap = System.Drawing.Drawing2D.LineCap.Round };
             SolidBrush BR = new SolidBrush(Color.FromArgb(180, 0, 100, 0));
@@ -783,7 +760,7 @@ namespace Kicad_gerber_panelizer
                 //  DrawMarker(G, PL2.Vertices.First(), 1, PW);
                 //  DrawMarker(G, PL2.Vertices.Last(), 1, PW);
             }
-
+            */
 
             //
             PolyLine PL = new PolyLine();
@@ -796,17 +773,6 @@ namespace Kicad_gerber_panelizer
                 FillShape(G, new SolidBrush(Color.FromArgb(140, 0, 0, 0)), PL);
                 DrawShape(G, new Pen(Color.Black), PL);
                 G.Transform = T;
-            }
-
-            if (Hoverinstance != null)
-            {
-                RenderInstance(G, PW, Color.Blue, Hoverinstance, false, false);
-            }
-
-            if (SelectedInstance != null)
-            {
-                RenderInstance(G, PW * 2, Color.Black, null, false, true);
-                RenderInstance(G, PW, Color.Black, SelectedInstance, false, true);
             }
 
             return img;
@@ -867,12 +833,9 @@ namespace Kicad_gerber_panelizer
 
             for (int j = 0; j < Shape.Count(); j++)
             {
-
                 var P1 = Shape.Vertices[j];
                 Points[j].X = (float)((P1.X));
                 Points[j].Y = (float)((P1.Y));
-
-
             }
             if (Points.Count() > 1)
                 G.DrawLines(P, Points);
@@ -1603,6 +1566,7 @@ namespace Kicad_gerber_panelizer
             foreach (var a in FilesPerExt)
             {
                 count++;
+                
                 Logger.AddString("merging *" + a.Key.ToLower(), ((float)count / (float)FilesPerExt.Keys.Count) * 0.5f + 0.3f);
                 switch (FileTypePerExt[a.Key])
                 {
@@ -1792,8 +1756,6 @@ namespace Kicad_gerber_panelizer
                     int cc = 0;
                     foreach (var c in b.TransformedOutlines)
                     {
-
-
                         if (Helpers.IsInPolygon(c.Vertices, pt))
                         {
                             cc++;

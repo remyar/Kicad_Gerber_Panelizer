@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Windows.Forms;
 using System.IO;
+using System.Threading;
 
 namespace Kicad_gerber_panelizer
 {
@@ -62,6 +63,8 @@ namespace Kicad_gerber_panelizer
             treeView1.Enabled = false;
             TV.setTreeView(treeView1);
             ZoomToFit();
+
+            this.addInstanceToolStripMenuItem.Click += new System.EventHandler(TV.addInstanceToolStripMenuItem_Click);
         }
 
         private void treeView1_DragDrop(object sender, DragEventArgs e)
@@ -73,9 +76,9 @@ namespace Kicad_gerber_panelizer
         PointD MouseToMM(PointD Mouse)
         {
             PointD P = new PointD(Mouse.X, Mouse.Y);
-            P.X -= panelizer_display.Width / 2;
-            P.Y -= panelizer_display.Height / 2;
-            P.Y *= -1;
+          //  P.X -= panelizer_display.Width / 2;
+          //  P.Y -= panelizer_display.Height / 2;
+          //  P.Y *= -1;
             P.X /= (float)Zoom;
             P.Y /= (float)Zoom;
             P.X += (float)CenterPoint.X;
@@ -92,30 +95,36 @@ namespace Kicad_gerber_panelizer
             if (folderBrowserDialog1.ShowDialog(this) == DialogResult.OK)
             {
 
+                bool add = true;
                 ZoomToFit();
 
-                var DropPoint = MouseToMM(new PointD(200, 200));
+                var DropPoint = MouseToMM(new PointD(250, 250));
 
                 string S = folderBrowserDialog1.SelectedPath;
 
-                var R = ThePanel.AddGerberFolder(S);
+                foreach (String p in ThePanel.TheSet.LoadedOutlines)
+                {
+                    if (p == S)
+                        add = false;
+                }
+                var R = ThePanel.AddGerberFolder(S, add);
                 foreach (var s in R)
                 {
-                    GerberInstance GI = new GerberInstance() { GerberPath = s };
+                    GerberInstance GI = new GerberInstance() { GerberPath = s};
                     GI.Center = DropPoint.ToF();
                     ThePanel.TheSet.Instances.Add(GI);
                     SelectedInstance = GI;
-
                     TV.BuildTree(this,ThePanel.TheSet);
                     Redraw(true, true);
                 }
 
-                ThePanel.MaxRectPack();
+                refreshPictureBox();
+              /*  ThePanel.MaxRectPack();
                 ThePanel.BuildAutoTabs();
-                ZoomToFit();
+                ZoomToFit();*/
             }
 
-            glControl1_Paint(sender);
+ //           glControl1_Paint(sender);
         }
 
         private void treeView1_AfterSelect(object sender, TreeViewEventArgs e)
@@ -148,7 +157,7 @@ namespace Kicad_gerber_panelizer
             MM05,
             Off
         }
-        SnapMode CurrentSnapMode = SnapMode.Off;
+        SnapMode CurrentSnapMode = SnapMode.MM1;
 
         internal void Redraw(bool refreshshape = true, bool force = false)
         {
@@ -158,7 +167,7 @@ namespace Kicad_gerber_panelizer
             {
                 ShapeMarkedForUpdate = true;
                 //ProcessButton.Enabled = true;
-
+                //glControl1_Paint();
             }
             //glControl1.Invalidate();
         }
@@ -177,7 +186,7 @@ namespace Kicad_gerber_panelizer
 
         }
 
-        private void glControl1_Paint(object sender, PaintEventArgs e = null)
+        private void glControl1_Paint(object sender = null, PaintEventArgs e = null)
         {
             if (ShapeMarkedForUpdate && (AutoUpdate || ForceShapeUpdate))
             {
@@ -205,9 +214,7 @@ namespace Kicad_gerber_panelizer
 
             using (Graphics grfx = Graphics.FromImage(panelizer_display.Image))
             {
-                grfx.ScaleTransform(5, 5); 
-                grfx.DrawImage(ThePanel.DrawBoardBitmap(1.0f / DrawingScale, panelizer_display.Width, panelizer_display.Height, SelectedInstance, null, SnapDistance()), new PointF(SelectedInstance.Center.X, SelectedInstance.Center.Y));
-          
+                grfx.DrawImage(ThePanel.DrawBoardBitmap(1.0f / DrawingScale, panelizer_display.Width, panelizer_display.Height, SelectedInstance, null, SnapDistance()), new PointF(0, 0));
             }
 
             panelizer_display.Refresh();
@@ -215,7 +222,7 @@ namespace Kicad_gerber_panelizer
 
         public void ZoomToFit()
         {
-            if (ThePanel.TheSet.Width > 0 && ThePanel.TheSet.Height > 0 && panelizer_display.Width > 0 && panelizer_display.Height > 0)
+          /*  if (ThePanel.TheSet.Width > 0 && ThePanel.TheSet.Height > 0 && panelizer_display.Width > 0 && panelizer_display.Height > 0)
             {
                 double A1 = (ThePanel.TheSet.Width + 8) / (ThePanel.TheSet.Height + 8);
                 double A2 = panelizer_display.Width / panelizer_display.Height;
@@ -225,7 +232,7 @@ namespace Kicad_gerber_panelizer
                 CenterPoint.X = ThePanel.TheSet.Width / 2;
                 CenterPoint.Y = ThePanel.TheSet.Height / 2;
             }
-            else
+            else*/
             {
                 Zoom = 1;
                 CenterPoint = new PointD(0, 0);
@@ -275,28 +282,220 @@ namespace Kicad_gerber_panelizer
 
         private void refreshPictureBox()
         {
-            //-- on dessine les outline de chaque gerber
-          /*  foreach (Gerber_utils gb in GerberUtils)
+            ThePanel.MaxRectPack();
+            ThePanel.BuildAutoTabs();
+            ZoomToFit();
+            glControl1_Paint();
+        }
+
+        bool MouseCapture = false;
+        PointD DragStartCoord = new PointD();
+        PointD DragInstanceOriginalPosition = new PointD();
+        PointD LastMouseMove = new PointD(0, 0);
+
+        internal void SetSelectedInstance(AngledThing gerberInstance)
+        {
+
+            SelectedInstance = gerberInstance;
+
+            //UpdateHoverControls();
+
+            //ID.UpdateBoxes(this);
+            //Redraw(false);
+        }
+
+        private void panelizer_display_MouseDown(object sender, MouseEventArgs e)
+        {
+            if (e.Button == System.Windows.Forms.MouseButtons.Left)
             {
-                foreach (Layer l in gb.layerList)
+                SelectedInstance = ThePanel.FindOutlineUnderPoint(MouseToMM(new PointD(e.X, e.Y)));
+                if (SelectedInstance != null)
                 {
-                    if (l.getBoardLayer() == BoardLayer.Outline)
+                    MouseCapture = true;
+                    DragStartCoord = new PointD(e.X, e.Y);
+                    DragInstanceOriginalPosition = new PointD(SelectedInstance.Center);
+                }
+                SetSelectedInstance(SelectedInstance);
+            }
+        }
+
+        private void panelizer_display_MouseEnter(object sender, EventArgs e)
+        {
+
+        }
+
+        private void panelizer_display_MouseUp(object sender, MouseEventArgs e)
+        {
+            if (MouseCapture)
+            {
+                //ID.UpdateBoxes(this);
+
+                MouseCapture = false;
+                PointD Delta = new PointD(e.X, e.Y) - DragStartCoord;
+                if (Delta.Length() == 0)
+                {
+                    if (SelectedInstance != null)
                     {
-                        ParsedGerber TheGerber;
-                        var G = gerberParser.ParseGerber274x(l.getLines(), false, true);
-                        G.Name = l.getLayerName();
-
-                        TheGerber = G;
-
-                        TheGerber.FixPolygonWindings();
-                        foreach (var a in TheGerber.OutlineShapes)
-                        {
-                            a.CheckIfHole();
-                        }
+                        SelectedInstance.Center = DragInstanceOriginalPosition.ToF();
 
                     }
+                    Redraw(false);
                 }
-            }*/
+                else
+                {
+                    if (SelectedInstance != null)
+                    {
+                        var GI = SelectedInstance as GerberInstance;
+                      
+                        if (GI != null)
+                        {
+                           // GI.Center.X = e.X - (int)(GI.BoundingBox.Width() / 2.0);
+                           // GI.Center.Y = e.Y + (int)(GI.BoundingBox.Height() / 2.0);
+                            GI.RebuildTransformed(ThePanel.GerberOutlines[GI.GerberPath], ThePanel.TheSet.ExtraTabDrillDistance);
+
+
+                        }
+                    }
+                    Redraw(true);
+
+                    glControl1_Paint(sender);
+                }
+            }
+        }
+
+        public PointD Snap(PointD inp)
+        {
+            if (CurrentSnapMode == SnapMode.Off)
+                return inp;
+
+            double multdiv = 1;
+
+            switch (CurrentSnapMode)
+            {
+                case SnapMode.MM1: break;
+                case SnapMode.MM05: multdiv = 2; break;
+                case SnapMode.Mil50: multdiv = 0.254 / 2.0; break;
+                case SnapMode.Mil100: multdiv = 0.254; break;
+            };
+
+            PointD Res = new PointD();
+            Res.X = Math.Floor(inp.X * multdiv) / multdiv;
+            Res.Y = Math.Floor(inp.Y * multdiv) / multdiv;
+            return Res;
+
+        }
+
+        private void panelizer_display_MouseMove(object sender, MouseEventArgs e)
+        {
+            LastMouseMove = new PointD(e.X, e.Y);
+            if (MouseCapture && SelectedInstance != null)
+            {
+                PointD Delta = new PointD(e.X, e.Y) - DragStartCoord;
+                Delta.X /= Zoom;
+                Delta.Y /= -Zoom;
+
+                PointD newP = new PointD(DragInstanceOriginalPosition.X + Delta.X, DragInstanceOriginalPosition.Y - Delta.Y);
+                SelectedInstance.Center = Snap(newP).ToF();
+                //UpdateHoverControls();
+                //       SelectedInstance.Center.Y = (float)(DragInstanceOriginalPosition.Y + Delta.Y);
+                Redraw(false);
+                glControl1_Paint(sender);
+            }
+            else
+            {
+
+              /*  var newHoverShape = ThePanel.FindOutlineUnderPoint(MouseToMM(new PointD(e.X, e.Y)));
+                if (newHoverShape != HoverShape)
+                {
+                    HoverShape = newHoverShape;
+                    Redraw(false);
+                }*/
+            }
+
+            
+        }
+
+        PointD ContextStartCoord = new PointD();
+
+        public void _AddInstance(string path, PointD coord)
+        {
+            SetSelectedInstance(ThePanel.AddInstance(path, MouseToMM(coord)));
+            TV.BuildTree(this, ThePanel.TheSet);
+            Redraw(true);
+
+            refreshPictureBox();
+        }
+
+        private void _addinstance(object sender, EventArgs e)
+        {
+            ToolStripDropDownItem TSDDI = sender as ToolStripDropDownItem;
+            _AddInstance(TSDDI.Text, ContextStartCoord);
+            //Console.WriteLine(sender.GetType().ToString());
+        }
+
+        private void treeView1_MouseDown(object sender, MouseEventArgs e)
+        {
+            if (e.Button == System.Windows.Forms.MouseButtons.Right)
+            {
+                PointD pd = new PointD(e.X + treeView1.Location.X, e.Y + treeView1.Location.Y);
+                SelectedInstance = ThePanel.FindOutlineUnderPoint(MouseToMM(new PointD(pd.X, pd.Y)));
+
+                ContextStartCoord = new PointD(pd.X,pd.Y);
+
+                addInstanceToolStripMenuItem.DropDownItems.Clear();
+                foreach (var a in ThePanel.TheSet.LoadedOutlines)
+                {
+                    addInstanceToolStripMenuItem.DropDownItems.Add(a, null, _addinstance);
+                }
+
+                contextMenuStrip1.Show(this, new Point((int)pd.X , (int)pd.Y));
+            }
+        }
+
+        private void exportToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            exportAllGerbersToolStripMenuItem_Click(null, null);
+        }
+
+        String ExportFolder;
+        Thread ExportThread;
+        Progress ProgressDialog;
+        public void exportAllGerbersToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                folderBrowserDialog2.SelectedPath = ThePanel.TheSet.LastExportFolder;
+            }
+            catch (Exception)
+            {
+
+            }
+            if (folderBrowserDialog2.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            {
+                ExportFolder = folderBrowserDialog2.SelectedPath;
+                ProgressDialog = new Progress(this);
+                ProgressDialog.Show();
+                Enabled = false;
+                //ParentFrame.Enabled = false;
+                ExportThread = new Thread(new ThreadStart(ExportThreadFunc));
+                ExportThread.Start();
+
+            }
+        }
+
+        public void ExportThreadFunc()
+        {
+            ThePanel.SaveGerbersToFolder(BaseName, ExportFolder, ProgressDialog);
+        }
+
+        internal void ProcessDone()
+        {
+            this.Enabled = true;
+            //ParentFrame.Enabled = true;
+
+            ProgressDialog.Close();
+            ProgressDialog.Dispose();
+            ProgressDialog = null;
         }
     }
 }
