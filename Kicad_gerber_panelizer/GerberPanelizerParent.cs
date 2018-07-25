@@ -170,6 +170,7 @@ namespace Kicad_gerber_panelizer
                 //glControl1_Paint();
             }
             //glControl1.Invalidate();
+            //glControl1_Paint();
         }
 
         public double SnapDistance()
@@ -308,11 +309,11 @@ namespace Kicad_gerber_panelizer
         {
             if (e.Button == System.Windows.Forms.MouseButtons.Left)
             {
-                SelectedInstance = ThePanel.FindOutlineUnderPoint(MouseToMM(new PointD(e.X, e.Y)));
+                SelectedInstance = ThePanel.FindOutlineUnderPoint(MouseToMM(new PointD(e.X / 5, e.Y / 5)));
                 if (SelectedInstance != null)
                 {
                     MouseCapture = true;
-                    DragStartCoord = new PointD(e.X, e.Y);
+                    DragStartCoord = new PointD(e.X/5, e.Y/5);
                     DragInstanceOriginalPosition = new PointD(SelectedInstance.Center);
                 }
                 SetSelectedInstance(SelectedInstance);
@@ -331,7 +332,7 @@ namespace Kicad_gerber_panelizer
                 //ID.UpdateBoxes(this);
 
                 MouseCapture = false;
-                PointD Delta = new PointD(e.X, e.Y) - DragStartCoord;
+                PointD Delta = new PointD(e.X/5, e.Y/5) - DragStartCoord;
                 if (Delta.Length() == 0)
                 {
                     if (SelectedInstance != null)
@@ -387,10 +388,10 @@ namespace Kicad_gerber_panelizer
 
         private void panelizer_display_MouseMove(object sender, MouseEventArgs e)
         {
-            LastMouseMove = new PointD(e.X, e.Y);
+            LastMouseMove = new PointD(e.X/5, e.Y/5);
             if (MouseCapture && SelectedInstance != null)
             {
-                PointD Delta = new PointD(e.X, e.Y) - DragStartCoord;
+                PointD Delta = new PointD(e.X / 5, e.Y / 5) - DragStartCoord;
                 Delta.X /= Zoom;
                 Delta.Y /= -Zoom;
 
@@ -417,38 +418,23 @@ namespace Kicad_gerber_panelizer
 
         PointD ContextStartCoord = new PointD();
 
-        public void _AddInstance(string path, PointD coord)
-        {
-            SetSelectedInstance(ThePanel.AddInstance(path, MouseToMM(coord)));
-            TV.BuildTree(this, ThePanel.TheSet);
-            Redraw(true);
-
-            refreshPictureBox();
-        }
-
-        private void _addinstance(object sender, EventArgs e)
-        {
-            ToolStripDropDownItem TSDDI = sender as ToolStripDropDownItem;
-            _AddInstance(TSDDI.Text, ContextStartCoord);
-            //Console.WriteLine(sender.GetType().ToString());
-        }
-
         private void treeView1_MouseDown(object sender, MouseEventArgs e)
         {
             if (e.Button == System.Windows.Forms.MouseButtons.Right)
             {
-                PointD pd = new PointD(e.X + treeView1.Location.X, e.Y + treeView1.Location.Y);
-                SelectedInstance = ThePanel.FindOutlineUnderPoint(MouseToMM(new PointD(pd.X, pd.Y)));
-
-                ContextStartCoord = new PointD(pd.X,pd.Y);
-
-                addInstanceToolStripMenuItem.DropDownItems.Clear();
-                foreach (var a in ThePanel.TheSet.LoadedOutlines)
+                TreeNode node = treeView1.GetNodeAt(e.Location);
+                if (node.GetType() == typeof(Treeview.InstanceTreeNode))
                 {
-                    addInstanceToolStripMenuItem.DropDownItems.Add(a, null, _addinstance);
+                    var P = PointToScreen(new Point(e.X + treeView1.Location.X, e.Y + treeView1.Location.Y));
+                    contextMenuStrip1.Show(P);
+                    treeView1.SelectedNode = node;
                 }
-
-                contextMenuStrip1.Show(this, new Point((int)pd.X , (int)pd.Y));
+                if (node.GetType() == typeof(Treeview.GerberFileNode))
+                {
+                    var P = PointToScreen(new Point(e.X, e.Y));
+                    contextMenuStrip1.Show(P);
+                    treeView1.SelectedNode = node;
+                }
             }
         }
 
@@ -496,6 +482,15 @@ namespace Kicad_gerber_panelizer
             ProgressDialog.Close();
             ProgressDialog.Dispose();
             ProgressDialog = null;
+        }
+
+        internal void AddInstance(string path, PointD coord)
+        {
+
+            SetSelectedInstance(ThePanel.AddInstance(path, MouseToMM(coord)));
+            TV.BuildTree(this, ThePanel.TheSet);
+            Redraw(true);
+            refreshPictureBox();
         }
     }
 }

@@ -37,7 +37,7 @@ namespace Kicad_gerber_panelizer
 
         }
 
-        class InstanceTreeNode : TreeNode
+        public class InstanceTreeNode : TreeNode
         {
             public AngledThing TargetInstance;
 
@@ -60,7 +60,7 @@ namespace Kicad_gerber_panelizer
             }
         }
 
-        class GerberFileNode : TreeNode
+        public class GerberFileNode : TreeNode
         {
             public string pPath;
             public GerberFileNode(string path)
@@ -129,7 +129,7 @@ namespace Kicad_gerber_panelizer
             }
             if (path.Length > 0)
             {
-              //  TargetHost.AddInstance(path, new PointD(0, 0));
+                TargetHost.AddInstance(path, new PointD(0, 0));
             }
         }
     }

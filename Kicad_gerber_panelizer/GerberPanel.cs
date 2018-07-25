@@ -1690,7 +1690,7 @@ namespace Kicad_gerber_panelizer
 
         }
 
-        public GerberInstance AddInstance(string path, PointD coord, bool generateTransformed = false)
+        public GerberInstance AddInstance(string path, PointD coord, bool generateTransformed = true)
         {
             GerberInstance GI = new GerberInstance() { GerberPath = path, Center = coord.ToF() };
             TheSet.Instances.Add(GI);
